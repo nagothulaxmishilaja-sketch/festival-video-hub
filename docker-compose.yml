@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: festival_db
+    environment:
+      POSTGRES_USER: ${DB_USER:-festival_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-festival_pass}
+      POSTGRES_DB: ${DB_NAME:-festival_hub}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - festival_network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: festival_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - festival_network
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: festival_backend
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-festival_user}
+      DB_PASSWORD: ${DB_PASSWORD:-festival_pass}
+      DB_NAME: ${DB_NAME:-festival_hub}
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-your-secret-key}
+      PORT: 5000
+    ports:
+      - "5000:5000"
+    depends_on:
+      - db
+      - redis
+    networks:
+      - festival_network
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: festival_frontend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:5000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - festival_network
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
+volumes:
+  postgres_data:
+
+networks:
+  festival_network:
+    driver: bridge
